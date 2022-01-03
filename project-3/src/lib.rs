@@ -3,7 +3,6 @@
 #![deny(missing_docs)]
 
 use byteorder::{BigEndian, ReadBytesExt};
-use failure;
 
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -214,7 +213,7 @@ impl KvStore {
         }
 
         Ok(KvStore {
-            path: path.to_owned(),
+            path,
             offset_map,
             redundancies,
         })
