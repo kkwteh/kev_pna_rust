@@ -1,5 +1,8 @@
 use clap::{crate_authors, crate_version};
 use kvs::{KvStore, KvsEngine, SledEngine};
+use slog::{self, info, o, Drain};
+use slog_async;
+use slog_term;
 use std::{
     env::current_dir,
     net::{AddrParseError, SocketAddr},
@@ -19,8 +22,17 @@ struct ServerOpt {
 }
 
 fn main() {
+    let decorator = slog_term::TermDecorator::new().build();
+    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let drain = slog_async::Async::new(drain).build().fuse();
+
+    let logger = slog::Logger::root(drain, o!());
+
     let opt = ServerOpt::from_args();
     dbg!(&opt);
+
+    let version = env!("CARGO_PKG_VERSION");
+    info!(logger, "kvs-server version {version}", version = version);
 
     let socket_parse: Result<SocketAddr, AddrParseError> = opt.addr.parse();
     let _socket = match socket_parse {
