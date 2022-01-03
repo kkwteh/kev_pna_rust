@@ -15,9 +15,10 @@ use rmps::Serializer;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 
-use std::io::{prelude::*, SeekFrom};
+use std::io::{self, prelude::*, SeekFrom};
 use std::mem::size_of;
 
+use sled::{self, Db};
 use std::path::{Path, PathBuf};
 
 const SIZE_OF_U64: u64 = size_of::<u64>() as u64;
@@ -305,21 +306,59 @@ pub trait KvsEngine {
 }
 
 /// KvsEngine implementation using sled crate
-pub struct SledEngine {}
+pub struct SledEngine {
+    db: Db,
+}
 
 impl KvsEngine for SledEngine {
     /// Gets a value from the key-value store
-    fn get(&mut self, _k: String) -> Result<Option<String>> {
-        Ok(None)
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        let value = self.db.get(&key)?;
+        match value {
+            None => Ok(None),
+            Some(ivec) => {
+                let value_string = std::str::from_utf8(&ivec)?.to_owned();
+                Ok(Some(value_string))
+            }
+        }
     }
 
     /// Used to set key in store
-    fn set(&mut self, _k: String, _v: String) -> Result<()> {
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        self.db.insert(key.as_bytes(), value.as_bytes())?;
         Ok(())
     }
 
     /// Used to remove key from store
-    fn remove(&mut self, _k: String) -> Result<()> {
+    fn remove(&mut self, key: String) -> Result<()> {
+        let value = self.db.remove(&key)?;
+        match value {
+            None => {}
+            Some(_ivec) => {}
+        }
         Ok(())
     }
+}
+
+impl SledEngine {
+    /// Opens the SledEngine at the given location
+    pub fn open(path: &Path) -> Result<Self> {
+        if !path.is_dir() {
+            return Err(failure::err_msg("path is not directory"));
+        };
+
+        let db = sled::open(path)?;
+
+        Ok(SledEngine { db })
+    }
+}
+
+#[test]
+fn test_sled() {
+    use std::env::current_dir;
+    let cwd = current_dir().unwrap();
+    let mut sled = SledEngine::open(&cwd).unwrap();
+    sled.set("foo".to_owned(), "bar".to_owned()).unwrap();
+    let foo = sled.get("foo".to_owned()).unwrap();
+    assert_eq!(foo, Some("bar".to_owned()));
 }

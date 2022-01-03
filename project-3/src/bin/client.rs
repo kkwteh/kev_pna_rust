@@ -36,7 +36,6 @@ enum Kv {
 
 fn main() {
     let opt = Kv::from_args();
-    dbg!(&opt);
 
     let socket: SocketAddr = match opt.clone() {
         Kv::Get { addr, key: _ } => {
@@ -84,7 +83,6 @@ fn main() {
 
     match TcpStream::connect(socket) {
         Ok(mut stream) => {
-            println!("Successfully connected to server");
             stream.write(b"*").unwrap();
             let num_commands = (1 as u64).to_be_bytes();
             stream.write(&num_commands).unwrap();
@@ -96,9 +94,6 @@ fn main() {
             stream.write(&command_length).unwrap();
             stream.write(&serialized_command).unwrap();
         }
-        Err(e) => {
-            println!("Failed to connect: {}", e);
-        }
+        Err(e) => {}
     }
-    println!("Terminated.");
 }

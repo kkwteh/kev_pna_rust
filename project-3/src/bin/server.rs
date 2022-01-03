@@ -36,7 +36,10 @@ struct ServerOpt {
 }
 const SIZE_OF_U64: usize = size_of::<u64>() as usize;
 /// Handle tcp connection from client
-fn handle_connection(mut stream: TcpStream) -> Result<(), failure::Error> {
+fn handle_connection(
+    mut stream: TcpStream,
+    engine: &mut Box<dyn KvsEngine>,
+) -> Result<(), failure::Error> {
     // Draw inspiration from Redis protocol
     // let msg = b"*1\r\n$4\r\nPING\r\n";
     // format:
@@ -67,6 +70,7 @@ fn handle_connection(mut stream: TcpStream) -> Result<(), failure::Error> {
         num_commands = num_commands
     );
 
+    let mut commands: Vec<MPCommand> = vec![];
     for _i in 0..num_commands {
         let mut command_length = [0 as u8; SIZE_OF_U64];
         stream.read_exact(&mut command_length)?;
@@ -87,7 +91,19 @@ fn handle_connection(mut stream: TcpStream) -> Result<(), failure::Error> {
         }
         let command: MPCommand = rmp_serde::decode::from_read_ref(&ser_command)?;
         info!(LOGGER, "deserialized command");
-        dbg!(&command);
+        commands.push(command);
+
+        commands.iter().for_each(|command| match command {
+            MPCommand::Get { key } => {
+                let _value = engine.get(key.clone());
+            }
+            MPCommand::Set { key, value } => {
+                let _value = engine.set(key.clone(), value.clone());
+            }
+            MPCommand::Rm { key } => {
+                let _value = engine.remove(key.clone());
+            }
+        });
     }
 
     Ok(())
@@ -103,13 +119,17 @@ fn main() {
         }
     };
 
-    let _engine: Box<dyn KvsEngine> = match &opt.engine.to_lowercase()[..] {
+    let mut engine: Box<dyn KvsEngine> = match &opt.engine.to_lowercase()[..] {
         "sled" => {
             let cwd = current_dir().unwrap();
             let store = KvStore::open(&cwd.join("my-file")).unwrap();
             Box::new(store)
         }
-        "kvs" => Box::new(SledEngine {}),
+        "kvs" => {
+            let cwd = current_dir().unwrap();
+            let sled = SledEngine::open(&cwd).unwrap();
+            Box::new(sled)
+        }
         _ => {
             std::process::exit(1);
         }
@@ -119,7 +139,7 @@ fn main() {
     info!(LOGGER, "kvs-server version {version}", version = version);
     info!(
         LOGGER,
-        "server config: {addr} {port} {engine_name}",
+        "server config: {addr}:{port} {engine_name}",
         addr = socket.ip().to_string(),
         port = socket.port(),
         engine_name = &opt.engine
@@ -136,7 +156,7 @@ fn main() {
                         "New connection from: {peer_addr}",
                         peer_addr = stream.peer_addr().unwrap(),
                     );
-                    handle_connection(stream).unwrap();
+                    handle_connection(stream, &mut engine).unwrap();
                 }
                 Err(e) => {
                     info!(LOGGER, "Error: {}", e);
