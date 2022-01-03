@@ -10,7 +10,7 @@ clap = "2.34.0"
 structopt = "0.3.25"
 failure = "0.1.5"
 byteorder = "1.4.3"
-serde = "1.0.132"
+serde = { version = "1.0.132", features = ["derive"] }
 lazy_static = "1.4.0"
 tempfile = "3.0.7"
 rand = "0.8.4"
