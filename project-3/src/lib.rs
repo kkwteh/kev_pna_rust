@@ -9,7 +9,6 @@ use rand::{thread_rng, Rng};
 
 use serde::{Deserialize, Serialize};
 extern crate rmp_serde as rmps;
-extern crate serde;
 
 use rmps::Serializer;
 
@@ -23,10 +22,26 @@ use std::path::{Path, PathBuf};
 
 const SIZE_OF_U64: u64 = size_of::<u64>() as u64;
 
+/// enum representing a command
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
-enum MPCommand {
-    Set { key: String, value: String },
-    Rm { key: String },
+pub enum MPCommand {
+    /// get command
+    Get {
+        /// key to get
+        key: String,
+    },
+    /// set command
+    Set {
+        /// key to set
+        key: String,
+        /// value corresponding to key
+        value: String,
+    },
+    /// rm command
+    Rm {
+        /// key to remove
+        key: String,
+    },
 }
 
 /// Main struct implementing key-value store functionality
@@ -69,7 +84,7 @@ impl KvsEngine for KvStore {
                     let record: MPCommand = rmps::decode::from_read_ref(&buf)?;
                     match record {
                         MPCommand::Set { value, .. } => Ok(Some(value)),
-                        MPCommand::Rm { .. } => Err(failure::err_msg("Found rm instead of set")),
+                        _ => Err(failure::err_msg("Did not find set command where expected")),
                     }
                 }
             }
@@ -208,6 +223,9 @@ impl KvStore {
                     redundancies += 2;
                     offset_map.remove(&key);
                 }
+                MPCommand::Get { key: _ } => {
+                    return Err(failure::err_msg("found get command in file"));
+                }
             }
             offset += record_len as u64 + SIZE_OF_U64;
         }
@@ -252,9 +270,7 @@ impl KvStore {
                         new_offset_map.insert(key, new_offset);
                         new_offset += (buf_len.len() + buf.len()) as u64;
                     }
-                    MPCommand::Rm { .. } => {
-                        return Err(failure::err_msg("Found rm command at set location"))
-                    }
+                    _ => return Err(failure::err_msg("Found invalid command at location")),
                 }
             }
             self.offset_map = new_offset_map;
