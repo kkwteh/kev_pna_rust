@@ -15,7 +15,7 @@ use rmps::Serializer;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 
-use std::io::{self, prelude::*, SeekFrom};
+use std::io::{prelude::*, SeekFrom};
 use std::mem::size_of;
 
 use sled::{self, Db};
@@ -333,10 +333,9 @@ impl KvsEngine for SledEngine {
     fn remove(&mut self, key: String) -> Result<()> {
         let value = self.db.remove(&key)?;
         match value {
-            None => {}
-            Some(_ivec) => {}
+            None => Err(failure::err_msg("Key not found")),
+            Some(_ivec) => Ok(()),
         }
-        Ok(())
     }
 }
 

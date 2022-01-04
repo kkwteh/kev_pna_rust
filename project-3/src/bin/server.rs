@@ -3,7 +3,7 @@ use failure;
 use kvs::{KvStore, KvsEngine, MPCommand, SledEngine};
 use lazy_static::lazy_static;
 use rmp_serde;
-use slog::{self, info, o, Drain, Logger};
+use slog::{self, error, info, o, Drain, Logger};
 use slog_async;
 use slog_term;
 use std::io::{Read, Write};
@@ -91,19 +91,90 @@ fn handle_connection(
         }
         let command: MPCommand = rmp_serde::decode::from_read_ref(&ser_command)?;
         info!(LOGGER, "deserialized command");
+        dbg!(&command);
         commands.push(command);
 
-        commands.iter().for_each(|command| match command {
-            MPCommand::Get { key } => {
-                let _value = engine.get(key.clone());
+        stream.write(b"*")?;
+        let num_values = (commands.len() as u64).to_be_bytes();
+
+        stream.write(&num_values)?;
+        for command in &commands {
+            // TODO: Write value to client
+            // format
+            // * , num values big_endian u64
+            // Ok: + , num_bytes (could be 0), value (string),
+            // Err: -, num_bytes, error string (could be binary format as well)
+            match command {
+                MPCommand::Get { key } => {
+                    let value = engine.get(key.clone());
+                    match value {
+                        Ok(Some(s)) => {
+                            // logic
+                            stream.write(b"+")?;
+                            let string_bytes = s.as_bytes();
+                            stream.write(&(string_bytes.len() as u64).to_be_bytes())?;
+                            stream.write(string_bytes)?;
+                        }
+                        Ok(None) => {
+                            stream.write(b"+")?;
+                            let msg = "Key not found";
+                            let msg_bytes = msg.as_bytes();
+                            stream.write(&(msg_bytes.len() as u64).to_be_bytes())?;
+                            stream.write(msg_bytes)?;
+                        }
+                        Err(_err) => {
+                            stream.write(b"-")?;
+                            let msg = "Error getting key";
+                            let msg_bytes = msg.as_bytes();
+                            stream.write(&(msg_bytes.len() as u64).to_be_bytes())?;
+                            stream.write(msg_bytes)?;
+                        }
+                    }
+                }
+                MPCommand::Set { key, value } => {
+                    let value = engine.set(key.clone(), value.clone());
+                    match value {
+                        Ok(()) => {
+                            stream.write(b"+")?;
+                            stream.write(&(0 as u64).to_be_bytes())?;
+                        }
+                        Err(_err) => {
+                            stream.write(b"-")?;
+                            let msg = "Error setting key value pair";
+                            let msg_bytes = msg.as_bytes();
+                            stream.write(&(msg_bytes.len() as u64).to_be_bytes())?;
+                            stream.write(msg_bytes)?;
+                        }
+                    }
+                }
+                MPCommand::Rm { key } => {
+                    let value = engine.remove(key.clone());
+                    match value {
+                        Ok(()) => {
+                            stream.write(b"+")?;
+                            stream.write(&(0 as u64).to_be_bytes())?;
+                        }
+                        Err(err) => match &format!("{}", err)[..] {
+                            "Key not found" => {
+                                stream.write(b"-")?;
+                                let msg = "Key not found";
+                                let msg_bytes = msg.as_bytes();
+                                stream.write(&(msg_bytes.len() as u64).to_be_bytes())?;
+                                stream.write(msg_bytes)?;
+                            }
+                            err_msg => {
+                                error!(LOGGER, "Error {err_msg}", err_msg = err_msg);
+                                stream.write(b"-")?;
+                                let msg = "Error removing key";
+                                let msg_bytes = msg.as_bytes();
+                                stream.write(&(msg_bytes.len() as u64).to_be_bytes())?;
+                                stream.write(msg_bytes)?;
+                            }
+                        },
+                    }
+                }
             }
-            MPCommand::Set { key, value } => {
-                let _value = engine.set(key.clone(), value.clone());
-            }
-            MPCommand::Rm { key } => {
-                let _value = engine.remove(key.clone());
-            }
-        });
+        }
     }
 
     Ok(())
