@@ -191,12 +191,12 @@ fn main() {
     };
 
     let mut engine: Box<dyn KvsEngine> = match &opt.engine.to_lowercase()[..] {
-        "sled" => {
+        "kvs" => {
             let cwd = current_dir().unwrap();
-            let store = KvStore::open(&cwd.join("my-file")).unwrap();
+            let store = KvStore::open(&cwd).unwrap();
             Box::new(store)
         }
-        "kvs" => {
+        "sled" => {
             let cwd = current_dir().unwrap();
             let sled = SledEngine::open(&cwd).unwrap();
             Box::new(sled)

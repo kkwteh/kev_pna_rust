@@ -47,7 +47,8 @@ pub enum MPCommand {
 
 /// Main struct implementing key-value store functionality
 pub struct KvStore {
-    offset_map: HashMap<String, u64>,
+    /// offset map
+    pub offset_map: HashMap<String, u64>,
     path: PathBuf,
     redundancies: u64,
 }
@@ -326,12 +327,14 @@ impl KvsEngine for SledEngine {
     /// Used to set key in store
     fn set(&mut self, key: String, value: String) -> Result<()> {
         self.db.insert(key.as_bytes(), value.as_bytes())?;
+        self.db.flush()?;
         Ok(())
     }
 
     /// Used to remove key from store
     fn remove(&mut self, key: String) -> Result<()> {
         let value = self.db.remove(&key)?;
+        self.db.flush()?;
         match value {
             None => Err(failure::err_msg("Key not found")),
             Some(_ivec) => Ok(()),
@@ -350,14 +353,4 @@ impl SledEngine {
 
         Ok(SledEngine { db })
     }
-}
-
-#[test]
-fn test_sled() {
-    use std::env::current_dir;
-    let cwd = current_dir().unwrap();
-    let mut sled = SledEngine::open(&cwd).unwrap();
-    sled.set("foo".to_owned(), "bar".to_owned()).unwrap();
-    let foo = sled.get("foo".to_owned()).unwrap();
-    assert_eq!(foo, Some("bar".to_owned()));
 }

@@ -1,4 +1,4 @@
-use kvs::{KvStore, KvsEngine, Result};
+use kvs::{KvStore, KvsEngine, Result, SledEngine};
 use tempfile::TempDir;
 use walkdir::WalkDir;
 
@@ -123,4 +123,14 @@ fn compaction() -> Result<()> {
     }
 
     panic!("No compaction detected");
+}
+
+#[test]
+fn test_sled() {
+    use std::env::current_dir;
+    let cwd = current_dir().unwrap();
+    let mut sled = SledEngine::open(&cwd).unwrap();
+    sled.set("foo".to_owned(), "bar".to_owned()).unwrap();
+    let foo = sled.get("foo".to_owned()).unwrap();
+    assert_eq!(foo, Some("bar".to_owned()));
 }
